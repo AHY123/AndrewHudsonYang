@@ -9,12 +9,16 @@ const SEPARATION_RADIUS = 50;
 const BOID_SIZE = 16; // Customizable size constant
 
 export class Boid {
-    sprite: PIXI.Graphics;
-    position: PIXI.Point;
-    velocity: PIXI.Point;
-    acceleration: PIXI.Point;
+    private readonly sprite: PIXI.Graphics;
+    private readonly position: PIXI.Point;
+    private readonly velocity: PIXI.Point;
+    private readonly acceleration: PIXI.Point;
 
     constructor(x: number, y: number, container: PIXI.Container) {
+        if (!container) {
+            throw new Error('Container is required for Boid initialization');
+        }
+
         this.position = new PIXI.Point(x, y);
         this.velocity = new PIXI.Point(
             Math.random() * 2 - 1,
@@ -26,8 +30,8 @@ export class Boid {
         this.sprite = new PIXI.Graphics()
             .beginFill(0xFF69B4) // Hot pink for better contrast
             .moveTo(0, -BOID_SIZE) // Top point
-            .lineTo(BOID_SIZE, BOID_SIZE) // Right point
-            .lineTo(-BOID_SIZE, BOID_SIZE) // Left point
+            .lineTo(BOID_SIZE * 0.85, BOID_SIZE) // Right point
+            .lineTo(-BOID_SIZE * 0.85, BOID_SIZE) // Left point
             .closePath()
             .endFill();
 
@@ -36,18 +40,30 @@ export class Boid {
         container.addChild(this.sprite);
     }
 
-    applyForce(force: PIXI.Point) {
+    public applyForce(force: PIXI.Point): void {
+        if (!force) {
+            throw new Error('Force vector is required');
+        }
         this.acceleration.x += force.x;
         this.acceleration.y += force.y;
     }
 
-    flock(boids: Boid[]) {
+    public flock(boids: Boid[]): void {
+        if (!Array.isArray(boids)) {
+            throw new Error('Boids must be an array');
+        }
+
         const alignment = new PIXI.Point(0, 0);
         const cohesion = new PIXI.Point(0, 0);
         const separation = new PIXI.Point(0, 0);
         let total = 0;
 
         for (const other of boids) {
+            if (!(other instanceof Boid)) {
+                console.warn('Invalid boid in flock array');
+                continue;
+            }
+
             const d = distance(this.position, other.position);
             if (other !== this && d < PERCEPTION_RADIUS) {
                 // Alignment
@@ -99,7 +115,7 @@ export class Boid {
             // Apply forces with weights
             const alignmentWeight = 1.0;
             const cohesionWeight = 1.0;
-            const separationWeight = 3;
+            const separationWeight = 2;
 
             alignment.x *= alignmentWeight;
             alignment.y *= alignmentWeight;
@@ -114,7 +130,10 @@ export class Boid {
         }
     }
 
-    attractTo(point: PIXI.Point, strength = 0.05) {
+    public attractTo(point: PIXI.Point, strength: number = 0.05): void {
+        if (!point) {
+            throw new Error('Point is required for attraction');
+        }
         const force = new PIXI.Point(
             point.x - this.position.x,
             point.y - this.position.y
@@ -123,7 +142,10 @@ export class Boid {
         this.applyForce(force);
     }
 
-    repelFrom(point: PIXI.Point, strength = 0.1, radius = 100) {
+    public repelFrom(point: PIXI.Point, strength: number = 0.1, radius: number = 100): void {
+        if (!point) {
+            throw new Error('Point is required for repulsion');
+        }
         const d = distance(this.position, point);
         if (d < radius) {
             const force = new PIXI.Point(
@@ -137,7 +159,7 @@ export class Boid {
         }
     }
 
-    update() {
+    public update(): void {
         // Physics
         this.velocity.x += this.acceleration.x;
         this.velocity.y += this.acceleration.y;
@@ -161,5 +183,18 @@ export class Boid {
 
         // Reset acceleration
         this.acceleration.set(0, 0);
+    }
+
+    // Getters for position and velocity (useful for debugging and testing)
+    public getPosition(): PIXI.Point {
+        return new PIXI.Point(this.position.x, this.position.y);
+    }
+
+    public getVelocity(): PIXI.Point {
+        return new PIXI.Point(this.velocity.x, this.velocity.y);
+    }
+
+    public getSprite(): PIXI.Graphics {
+        return this.sprite;
     }
 } 
