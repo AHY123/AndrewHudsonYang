@@ -9,6 +9,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,14 +26,12 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-      - name: List dist directory
-        run: ls -la dist
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
-      - name: List artifacts
-        run: find . -name "*.tar" -o -name "*.gz"
 
   deploy:
     needs: build
