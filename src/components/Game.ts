@@ -33,7 +33,7 @@ export class Game {
     this.app.stage.addChild(boidContainer);
 
     // Initialize boids for each color
-    const boidsPerColor = 50; // 500 total boids divided among 10 colors
+    const boidsPerColor = 30; // 500 total boids divided among 10 colors
     const colors: BoidColor[] = [
       BoidColor.PINK,
       BoidColor.BLUE,
@@ -93,17 +93,17 @@ export class Game {
   }
 
   private applyCircularFlow(boid: Boid): void {
-    const cursor = this.mousePosition;
-    const toCursor = cursor.copy().sub(boid.position);
-    const distance = toCursor.mag();
+    const dx = this.mousePosition.x - boid.position.x;
+    const dy = this.mousePosition.y - boid.position.y;
+    const distanceSquared = dx * dx + dy * dy;
     
-    if (distance < 150) { // Interaction radius
+    if (distanceSquared < 22500) { // 150 * 150
       // Calculate tangential force (perpendicular to direction to cursor)
-      const tangent = new Vector(-toCursor.y, toCursor.x);
+      const tangent = new Vector(-dy, dx);
       tangent.normalize();
       
       // Strength decreases with distance
-      const strength = (1 - distance / 150) * 0.3;
+      const strength = (1 - Math.sqrt(distanceSquared) / 150) * 0.3;
       tangent.mult(strength);
       
       boid.applyForce(tangent);
@@ -111,16 +111,16 @@ export class Game {
   }
 
   private applyDirectionalFlow(boid: Boid): void {
-    const cursor = this.mousePosition;
-    const toCursor = cursor.copy().sub(boid.position);
-    const distance = toCursor.mag();
+    const dx = this.mousePosition.x - boid.position.x;
+    const dy = this.mousePosition.y - boid.position.y;
+    const distanceSquared = dx * dx + dy * dy;
     
-    if (distance < 150) { // Interaction radius
+    if (distanceSquared < 22500) { // 150 * 150
       // Calculate the angle between boid's velocity and direction to cursor
-      const angle = Math.atan2(toCursor.y, toCursor.x) - Math.atan2(boid.velocity.y, boid.velocity.x);
+      const angle = Math.atan2(dy, dx) - Math.atan2(boid.velocity.y, boid.velocity.x);
       
       // Create a deflection force that's perpendicular to the direction to cursor
-      const deflection = new Vector(-toCursor.y, toCursor.x);
+      const deflection = new Vector(-dy, dx);
       deflection.normalize();
       
       // Determine which side to deflect based on the angle
@@ -129,7 +129,7 @@ export class Game {
       }
       
       // Strength increases as the boid heads more directly toward the cursor
-      const strength = (1 - distance / 150) * Math.abs(Math.sin(angle)) * 0.3;
+      const strength = (1 - Math.sqrt(distanceSquared) / 150) * Math.abs(Math.sin(angle)) * 0.3;
       deflection.mult(strength);
       
       boid.applyForce(deflection);

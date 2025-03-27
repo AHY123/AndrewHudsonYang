@@ -70,20 +70,27 @@ export class Boid {
     }
 
     private wrappedDistance(other: Boid): number {
-        // Calculate the shortest distance considering screen wrapping
-        let dx = Math.abs(this.position.x - other.position.x);
-        let dy = Math.abs(this.position.y - other.position.y);
+        // Early return if boids are far apart
+        const dx = Math.abs(this.position.x - other.position.x);
+        const dy = Math.abs(this.position.y - other.position.y);
+        
+        // If either distance is more than perception radius, they're definitely too far
+        if (dx > PERCEPTION_RADIUS || dy > PERCEPTION_RADIUS) {
+            return PERCEPTION_RADIUS + 1; // Return value that will be ignored by flocking
+        }
 
-        // If the distance is more than half the screen width/height, 
-        // we should wrap around
+        // Only calculate wrapped distance if boids are close enough
+        let wrappedDx = dx;
+        let wrappedDy = dy;
+
         if (dx > window.innerWidth / 2) {
-            dx = window.innerWidth - dx;
+            wrappedDx = window.innerWidth - dx;
         }
         if (dy > window.innerHeight / 2) {
-            dy = window.innerHeight - dy;
+            wrappedDy = window.innerHeight - dy;
         }
 
-        return Math.sqrt(dx * dx + dy * dy);
+        return Math.sqrt(wrappedDx * wrappedDx + wrappedDy * wrappedDy);
     }
 
     public flock(boids: Boid[]): void {
