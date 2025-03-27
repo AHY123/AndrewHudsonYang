@@ -33,7 +33,7 @@ export class Game {
     this.app.stage.addChild(boidContainer);
 
     // Initialize boids for each color
-    const boidsPerColor = 70; // 500 total boids divided among 10 colors
+    const boidsPerColor = 50; // 500 total boids divided among 10 colors
     const colors: BoidColor[] = [
       BoidColor.PINK,
       BoidColor.BLUE,
