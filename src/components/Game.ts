@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import { Boid, BoidColor } from '../boids/Boid';
 import { PuzzleTile, tileData, GAP, GRID_ROWS, GRID_COLS, calculateTileDimensions } from './PuzzleTile';
 import { Vector } from '../utils/vector';
+import { PuzzleState } from '../puzzle/PuzzleState';
 
 export class Game {
   private app: PIXI.Application;
@@ -9,8 +10,13 @@ export class Game {
   private tiles: PuzzleTile[] = [];
   private mousePosition: Vector;
   private isCircularFlow: boolean = false; // Changed default to directional flow
+  private puzzleState: PuzzleState;
+  private shuffleButton: HTMLButtonElement | null = null;
 
   constructor() {
+    // Initialize puzzle state
+    this.puzzleState = new PuzzleState();
+
     // Create PixiJS application
     this.app = new PIXI.Application({
       width: window.innerWidth,
@@ -33,7 +39,7 @@ export class Game {
     this.app.stage.addChild(boidContainer);
 
     // Initialize boids for each color
-    const boidsPerColor = 30; // 500 total boids divided among 10 colors
+    const boidsPerColor = 50; // 500 total boids divided among 10 colors
     const colors: BoidColor[] = [
       BoidColor.PINK,
       BoidColor.BLUE,
@@ -69,16 +75,23 @@ export class Game {
     );
     this.app.stage.addChild(tilesContainer);
 
-    // Create puzzle tiles (including the 9th tile)
+    // Create puzzle tiles
     tileData.forEach(data => {
       const tile = new PuzzleTile(data.id, data.correctRow, data.correctCol);
       tile.setTilePosition(data.correctRow, data.correctCol);
+      
+      // Listen for tile click events
+      tile.on('tileclick', (tile: PuzzleTile) => this.handleTileClick(tile));
+      
       tilesContainer.addChild(tile);
       this.tiles.push(tile);
     });
 
     // Handle window resize
     window.addEventListener('resize', this.onResize.bind(this));
+
+    // Create shuffle button
+    this.createShuffleButton();
 
     // Start the animation loop
     this.app.ticker.add(this.update.bind(this));
@@ -92,18 +105,55 @@ export class Game {
     });
   }
 
+  private handleTileClick(tile: PuzzleTile): void {
+    const [tileRow, tileCol] = this.puzzleState.findTilePosition(tile.id) || [0, 0];
+    
+    if (this.puzzleState.canMove(tileRow, tileCol)) {
+      // Get empty slot position
+      const [emptyRow, emptyCol] = this.puzzleState.findEmptySlot();
+      
+      // Update puzzle state
+      this.puzzleState.moveTile(tileRow, tileCol);
+      
+      // Find the empty tile (id 8)
+      const emptyTile = this.tiles.find(t => t.id === 8);
+      if (emptyTile) {
+        // Move the empty tile to the clicked tile's position
+        emptyTile.animateToPosition(tileRow, tileCol);
+        // Move the clicked tile to the empty position
+        tile.animateToPosition(emptyRow, emptyCol);
+      }
+      
+      // Check if puzzle is solved
+      if (this.puzzleState.isSolved()) {
+        console.log('Puzzle solved!');
+        // TODO: Add puzzle completion effects
+      }
+    }
+  }
+
   private applyCircularFlow(boid: Boid): void {
     const dx = this.mousePosition.x - boid.position.x;
     const dy = this.mousePosition.y - boid.position.y;
     const distanceSquared = dx * dx + dy * dy;
     
     if (distanceSquared < 22500) { // 150 * 150
-      // Calculate tangential force (perpendicular to direction to cursor)
+      // Calculate the angle between boid's velocity and direction to cursor
+      const toCursor = new Vector(dx, dy);
+      const angle = toCursor.angleBetween(boid.velocity);
+      
+      // Create tangential force (perpendicular to direction to cursor)
       const tangent = new Vector(-dy, dx);
       tangent.normalize();
       
-      // Strength decreases with distance
-      const strength = (1 - Math.sqrt(distanceSquared) / 150) * 0.3;
+      // Determine which way to flow based on which side of the cursor the boid is approaching from
+      if (angle < 0) {
+        tangent.mult(-1); // Reverse direction if needed
+      }
+      
+      // Smooth exponential falloff
+      const distance = Math.sqrt(distanceSquared);
+      const strength = Math.exp(-distance / 100) * 0.3; // 75 is the "half-life" distance
       tangent.mult(strength);
       
       boid.applyForce(tangent);
@@ -117,22 +167,33 @@ export class Game {
     
     if (distanceSquared < 22500) { // 150 * 150
       // Calculate the angle between boid's velocity and direction to cursor
-      const angle = Math.atan2(dy, dx) - Math.atan2(boid.velocity.y, boid.velocity.x);
+      const toCursor = new Vector(dx, dy);
+      const angle = toCursor.angleBetween(boid.velocity);
       
-      // Create a deflection force that's perpendicular to the direction to cursor
-      const deflection = new Vector(-dy, dx);
-      deflection.normalize();
-      
-      // Determine which side to deflect based on the angle
-      if (Math.sin(angle) < 0) {
-        deflection.mult(-1); // Reverse direction if needed
+      // If boid is moving away from cursor (angle > 90 degrees), apply scatter force
+      if (Math.abs(angle) > Math.PI / 2) {
+        // Create a scatter force in the direction of current velocity
+        const scatter = boid.velocity.copy();
+        scatter.normalize();
+        
+        // Smooth exponential falloff for scatter
+        const distance = Math.sqrt(distanceSquared);
+        const strength = Math.exp(-distance / 50) * 0.5; // 75 is the "half-life" distance
+        scatter.mult(strength);
+        
+        boid.applyForce(scatter);
+      } else {
+        // Create a charge force towards the cursor
+        const charge = toCursor.copy();
+        charge.normalize();
+        
+        // Smooth exponential falloff for charge
+        const distance = Math.sqrt(distanceSquared);
+        const strength = Math.exp(-distance / 50) * 0.5; // 75 is the "half-life" distance
+        charge.mult(strength);
+        
+        boid.applyForce(charge);
       }
-      
-      // Strength increases as the boid heads more directly toward the cursor
-      const strength = (1 - Math.sqrt(distanceSquared) / 150) * Math.abs(Math.sin(angle)) * 0.3;
-      deflection.mult(strength);
-      
-      boid.applyForce(deflection);
     }
   }
 
@@ -170,6 +231,74 @@ export class Game {
         (window.innerWidth - (GRID_COLS * (tileDimensions.width + GAP) - GAP)) / 2,
         (window.innerHeight - (GRID_ROWS * (tileDimensions.height + GAP) - GAP)) / 2
       );
+    }
+  }
+
+  private createShuffleButton(): void {
+    this.shuffleButton = document.createElement('button');
+    this.shuffleButton.textContent = 'Shuffle';
+    this.shuffleButton.className = 'shuffle-button';
+    
+    // Style the button
+    Object.assign(this.shuffleButton.style, {
+      position: 'fixed',
+      bottom: '20px',
+      right: '20px',
+      padding: '10px 20px',
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      color: '#FFE5B4',
+      border: 'none',
+      borderRadius: '6px',
+      fontSize: '16px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      fontFamily: 'Arial, sans-serif',
+      zIndex: '1000',
+      transition: 'background-color 0.2s',
+    });
+
+    // Add hover effect
+    this.shuffleButton.onmouseover = () => {
+      if (this.shuffleButton) {
+        this.shuffleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      }
+    };
+    this.shuffleButton.onmouseout = () => {
+      if (this.shuffleButton) {
+        this.shuffleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+      }
+    };
+
+    // Add click handler
+    this.shuffleButton.onclick = () => this.handleShuffle();
+
+    // Add to document
+    document.body.appendChild(this.shuffleButton);
+  }
+
+  private handleShuffle(): void {
+    // Shuffle the puzzle state
+    this.puzzleState.shuffle();
+
+    // Update visual positions of all tiles
+    const grid = this.puzzleState.getGrid();
+    for (let row = 0; row < GRID_ROWS; row++) {
+      for (let col = 0; col < GRID_COLS; col++) {
+        const tileId = grid[row][col];
+        // Find the tile that should be at this position
+        const tile = this.tiles.find(t => t.id === tileId);
+        if (tile) {
+          tile.animateToPosition(row, col);
+        }
+      }
+    }
+
+    // Ensure empty tile is visible and in correct position
+    const emptyTile = this.tiles.find(t => t.id === 8);
+    if (emptyTile) {
+      emptyTile.alpha = 0.5; // Make empty tile semi-transparent
+      const [emptyRow, emptyCol] = this.puzzleState.findEmptySlot();
+      emptyTile.animateToPosition(emptyRow, emptyCol);
     }
   }
 

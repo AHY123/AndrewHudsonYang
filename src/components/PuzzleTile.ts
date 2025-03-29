@@ -48,8 +48,6 @@ export class PuzzleTile extends PIXI.Container {
   correctRow: number;
   correctCol: number;
   private boidContainer: PIXI.Container;
-  dragging: boolean = false;
-  private startPosition: PIXI.Point | null = null;
   private htmlElement!: HTMLDivElement;
   private tileWidth: number;
   private tileHeight: number;
@@ -67,7 +65,7 @@ export class PuzzleTile extends PIXI.Container {
     this.boidContainer = new PIXI.Container();
     this.addChild(this.boidContainer);
 
-    // Create mask for the boid container
+    // Create mask for the boid container with higher quality
     const mask = new PIXI.Graphics();
     mask.beginFill(0xffffff);
     mask.drawRoundedRect(0, 0, this.tileWidth, this.tileHeight, CORNER_RADIUS);
@@ -75,10 +73,13 @@ export class PuzzleTile extends PIXI.Container {
     this.addChild(mask);
     this.boidContainer.mask = mask;
 
-    // Add border with rounded corners
+    // Add high-quality border with rounded corners
     const border = new PIXI.Graphics();
-    border.lineStyle(3, 0x4A4A4A, 1);
+    border.lineStyle(4, 0x4A4A4A, 1);
     border.drawRoundedRect(0, 0, this.tileWidth, this.tileHeight, CORNER_RADIUS);
+    // Add a subtle inner glow effect
+    border.lineStyle(2, 0x6A6A6A, 0.5);
+    border.drawRoundedRect(1, 1, this.tileWidth - 2, this.tileHeight - 2, CORNER_RADIUS - 1);
     this.addChild(border);
 
     // Make the last tile semi-transparent
@@ -91,7 +92,7 @@ export class PuzzleTile extends PIXI.Container {
       this.createHtmlElement();
     }
 
-    // Enable interactivity
+    // Set up interaction
     this.setupInteraction();
 
     // Ensure position updates after being added to stage
@@ -152,7 +153,7 @@ export class PuzzleTile extends PIXI.Container {
       this.tileWidth = newDimensions.width;
       this.tileHeight = newDimensions.height;
       
-      // Update mask
+      // Update mask with higher quality
       const oldMask = this.boidContainer.mask;
       const newMask = new PIXI.Graphics();
       newMask.beginFill(0xffffff);
@@ -165,12 +166,15 @@ export class PuzzleTile extends PIXI.Container {
       this.addChild(newMask);
       this.boidContainer.mask = newMask;
 
-      // Update border
+      // Update border with higher quality
       this.children.forEach(child => {
         if (child instanceof PIXI.Graphics && child !== newMask) {
           child.clear();
-          child.lineStyle(3, 0x4A4A4A, 1);
+          child.lineStyle(4, 0x4A4A4A, 1);
           child.drawRoundedRect(0, 0, this.tileWidth, this.tileHeight, CORNER_RADIUS);
+          // Add a subtle inner glow effect
+          child.lineStyle(2, 0x6A6A6A, 0.5);
+          child.drawRoundedRect(1, 1, this.tileWidth - 2, this.tileHeight - 2, CORNER_RADIUS - 1);
         }
       });
 
@@ -198,9 +202,10 @@ export class PuzzleTile extends PIXI.Container {
       pointerEvents: 'none',
       fontFamily: 'Arial, sans-serif',
       zIndex: '1000',
-      margin: '8px',
       transform: 'translate(0, 0)', // Initialize transform
       display: 'none', // Start hidden until positioned
+      top: '8px', // Position from top
+      left: '8px', // Position from left
     });
 
     // Add to the document
@@ -224,34 +229,55 @@ export class PuzzleTile extends PIXI.Container {
     });
   }
 
-  private setupInteraction() {
-    this.eventMode = 'static';
-    this.cursor = 'pointer';
+  private setupInteraction(): void {
+    // Create a transparent interactive layer
+    const interactiveLayer = new PIXI.Graphics();
+    interactiveLayer.beginFill(0xFFFFFF, 0.001); // Almost completely transparent
+    interactiveLayer.drawRoundedRect(0, 0, this.tileWidth, this.tileHeight, CORNER_RADIUS);
+    interactiveLayer.endFill();
+    interactiveLayer.eventMode = 'static';
+    interactiveLayer.cursor = 'pointer';
 
-    this.on('pointerdown', this.onDragStart)
-        .on('pointerup', this.onDragEnd)
-        .on('pointerupoutside', this.onDragEnd)
-        .on('pointermove', this.onDragMove);
-  }
+    // Create hover background
+    const hoverBackground = new PIXI.Graphics();
+    hoverBackground.beginFill(0x000000, 0.3);
+    hoverBackground.drawRoundedRect(0, 0, this.tileWidth, this.tileHeight, CORNER_RADIUS);
+    hoverBackground.endFill();
+    hoverBackground.visible = false;
+    this.addChild(hoverBackground);
 
-  private onDragStart = (event: PIXI.FederatedPointerEvent) => {
-    this.dragging = true;
-    this.startPosition = new PIXI.Point(event.globalX - this.x, event.globalY - this.y);
-    this.alpha = 0.8;
-  }
+    // Add hover effect
+    interactiveLayer.on('pointerover', () => {
+      if (this.id !== 8) { // Don't apply hover effect to empty tile
+        hoverBackground.visible = true;
+        gsap.to(hoverBackground, {
+          alpha: 1,
+          duration: 0.2,
+          ease: 'power2.out'
+        });
+      }
+    });
 
-  private onDragEnd = () => {
-    this.dragging = false;
-    this.startPosition = null;
-    this.alpha = 1;
-  }
+    interactiveLayer.on('pointerout', () => {
+      if (this.id !== 8) { // Don't apply hover effect to empty tile
+        gsap.to(hoverBackground, {
+          alpha: 0,
+          duration: 0.2,
+          ease: 'power2.out',
+          onComplete: () => {
+            hoverBackground.visible = false;
+          }
+        });
+      }
+    });
 
-  private onDragMove = (event: PIXI.FederatedPointerEvent) => {
-    if (this.dragging && this.startPosition) {
-      this.x = event.globalX - this.startPosition.x;
-      this.y = event.globalY - this.startPosition.y;
-      this.updateHtmlPosition();
-    }
+    // Add click handler
+    interactiveLayer.on('pointerdown', () => {
+      this.emit('tileclick', this);
+    });
+
+    // Add the interactive layer to the container
+    this.addChild(interactiveLayer);
   }
 
   animateToPosition(row: number, col: number) {

@@ -66,6 +66,23 @@ export class Vector {
     const angle = Math.random() * Math.PI * 2;
     return new Vector(Math.cos(angle), Math.sin(angle));
   }
+
+  public angleBetween(other: Vector): number {
+    // Calculate the angle between this vector and another vector
+    // Returns angle in radians, positive if this vector is to the left of other vector
+    const dot = this.x * other.x + this.y * other.y;
+    const mag1 = Math.sqrt(this.x * this.x + this.y * this.y);
+    const mag2 = Math.sqrt(other.x * other.x + other.y * other.y);
+    
+    if (mag1 === 0 || mag2 === 0) return 0;
+    
+    const cosAngle = dot / (mag1 * mag2);
+    const angle = Math.acos(Math.max(-1, Math.min(1, cosAngle)));
+    
+    // Determine sign of angle using cross product
+    const cross = this.x * other.y - this.y * other.x;
+    return cross >= 0 ? angle : -angle;
+  }
 }
 
 export function distance(a: PIXI.Point, b: PIXI.Point): number {
